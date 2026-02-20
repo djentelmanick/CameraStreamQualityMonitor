@@ -1,0 +1,61 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: "poc"
+    project: "camera-monitoring"
+
+scrape_configs:
+
+  # ── Сам Prometheus ────────────────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Кастомный RTSP-экспортёр ──────────────────────────────────────────────
+  - job_name: "rtsp_cameras"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["rtsp-exporter:9115"]
+    metrics_path: /metrics
+
+  # ── Blackbox: ICMP ping до mock-камер ─────────────────────────────────────
+  - job_name: "blackbox_icmp"
+    metrics_path: /probe
+    params:
+      module: [icmp_check]
+    static_configs:
+      - targets:
+          - mock-camera-1
+          - mock-camera-2
+          - mock-camera-3
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # ── Blackbox: TCP-проверка RTSP-порта ─────────────────────────────────────
+  - job_name: "blackbox_rtsp_tcp"
+    metrics_path: /probe
+    params:
+      module: [tcp_rtsp]
+    static_configs:
+      - targets:
+          - "mock-camera-1:8554"
+          - "mock-camera-2:8554"
+          - "mock-camera-3:8554"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # ── Blackbox exporter (self-monitoring) ───────────────────────────────────
+  - job_name: "blackbox_exporter"
+    static_configs:
+      - targets: ["blackbox:9115"]

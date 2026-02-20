@@ -1,0 +1,123 @@
+version: "3.8"
+
+services:
+
+  # ── Mock RTSP-сервер (имитирует IP-камеры) ────────────────────────────────
+  mock-camera-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    container_name: mock-camera-1
+    environment:
+      CAMERA_ID: "camera-1"
+      LATENCY_MS: "45"
+      PACKET_LOSS: "0.02"
+      PORT: "8554"
+    ports:
+      - "8554:8554"
+    networks:
+      - monitoring
+
+  mock-camera-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    container_name: mock-camera-2
+    environment:
+      CAMERA_ID: "camera-2"
+      LATENCY_MS: "120"
+      PACKET_LOSS: "0.08"
+      PORT: "8554"
+    ports:
+      - "8555:8554"
+    networks:
+      - monitoring
+
+  mock-camera-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    container_name: mock-camera-3
+    environment:
+      CAMERA_ID: "camera-3"
+      LATENCY_MS: "20"
+      PACKET_LOSS: "0.00"
+      PORT: "8554"
+    ports:
+      - "8556:8554"
+    networks:
+      - monitoring
+
+  # ── Кастомный RTSP-экспортёр ──────────────────────────────────────────────
+  rtsp-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile.exporter
+    container_name: rtsp-exporter
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./exporter_config.yml:/app/exporter_config.yml:ro
+    networks:
+      - monitoring
+    depends_on:
+      - mock-camera-1
+      - mock-camera-2
+      - mock-camera-3
+
+  # ── Blackbox exporter (ICMP / HTTP-проверки) ──────────────────────────────
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: blackbox
+    ports:
+      - "9116:9115"
+    volumes:
+      - ./blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    networks:
+      - monitoring
+
+  # ── Prometheus ────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    networks:
+      - monitoring
+    depends_on:
+      - blackbox
+      - rtsp-exporter
+
+  # ── Grafana ───────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:

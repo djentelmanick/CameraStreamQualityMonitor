@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir pyyaml
+
+COPY rtsp_exporter.py /app/rtsp_exporter.py
+COPY exporter_config.yml /app/exporter_config.yml
+
+EXPOSE 9115
+
+CMD ["python", "-u", "rtsp_exporter.py"]
