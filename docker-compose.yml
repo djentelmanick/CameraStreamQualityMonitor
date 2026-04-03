@@ -57,13 +57,41 @@ services:
     ports:
       - "9115:9115"
     volumes:
-      - ./exporter_config.yml:/app/exporter_config.yml:ro
+      - ./exporter_config.yml:/app/exporter_config.yml
     networks:
       - monitoring
     depends_on:
       - mock-camera-1
       - mock-camera-2
       - mock-camera-3
+
+  # ── Config API (FastAPI) ──────────────────────────────────────────────────
+  config-api:
+    build:
+      context: ./config_api
+      dockerfile: Dockerfile
+    container_name: config-api
+    ports:
+      - "8000:8000"
+    environment:
+      CONFIG_PATH: "/config/exporter_config.yml"
+    volumes:
+      - ./exporter_config.yml:/config/exporter_config.yml
+    networks:
+      - monitoring
+
+  # ── Config UI (React + Nginx) ─────────────────────────────────────────────
+  config-ui:
+    build:
+      context: ./config_ui
+      dockerfile: Dockerfile
+    container_name: config-ui
+    ports:
+      - "8080:80"
+    networks:
+      - monitoring
+    depends_on:
+      - config-api
 
   # ── Blackbox exporter (ICMP / HTTP-проверки) ──────────────────────────────
   blackbox:
