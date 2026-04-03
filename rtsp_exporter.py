@@ -11,12 +11,15 @@ rtsp_exporter.py — Кастомный Prometheus-экспортёр для м�
   - camera_last_scrape_timestamp (unix-время последнего опроса)
 """
 
+import os
 import time
 import socket
 import struct
 import random
 import logging
 import threading
+import urllib.request
+import urllib.error
 import yaml
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dataclasses import dataclass, field
@@ -178,6 +181,9 @@ class MetricsStore:
 
 store = MetricsStore()
 
+# Event для немедленного пробуждения поллера при изменении конфига
+config_changed = threading.Event()
+
 
 # ─── Фоновый поллер ──────────────────────────────────────────────────────────
 
@@ -219,7 +225,9 @@ def poll_loop():
             threads.append(t)
         for t in threads:
             t.join()
-        time.sleep(SCRAPE_INTERVAL)
+        # Ждём либо истечения интервала, либо сигнала об изменении конфига
+        config_changed.wait(timeout=SCRAPE_INTERVAL)
+        config_changed.clear()
 
 
 # ─── HTTP-сервер для Prometheus ───────────────────────────────────────────────
@@ -230,6 +238,21 @@ class Handler(BaseHTTPRequestHandler):
             body = store.render_prometheus().encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/reload":
+            # Немедленно будим поллер — новая/удалённая камера подхватится без ожидания
+            config_changed.set()
+            log.info("Config reload triggered via POST /reload")
+            body = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

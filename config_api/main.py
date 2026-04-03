@@ -7,8 +7,13 @@ config_api/main.py — FastAPI-сервис для управления конф
 """
 
 import os
+import logging
 import threading
+import urllib.request
+import urllib.error
 from typing import Dict, List, Optional
+
+log = logging.getLogger(__name__)
 
 import yaml
 from fastapi import FastAPI, HTTPException
@@ -16,6 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/exporter_config.yml")
+# URL экспортёра для уведомления об изменении конфига (POST /reload)
+EXPORTER_URL = os.environ.get("EXPORTER_URL", "http://rtsp-exporter:9115")
 
 app = FastAPI(
     title="Camera Config API",
@@ -31,6 +38,21 @@ app.add_middleware(
 )
 
 _lock = threading.Lock()
+
+
+def _notify_exporter() -> None:
+    """Уведомляет rtsp-exporter об изменении конфига через POST /reload.
+    Вызывается после create/update/delete камеры — поллер немедленно просыпается
+    и подхватывает изменения, не дожидаясь конца SCRAPE_INTERVAL (15 сек).
+    """
+    url = f"{EXPORTER_URL}/reload"
+    req = urllib.request.Request(url, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=2):
+            pass
+    except urllib.error.URLError as e:
+        # Не критично: поллер всё равно подхватит изменения на следующей итерации
+        log.warning(f"Could not notify exporter: {e}")
 
 
 # ─── Модели ──────────────────────────────────────────────────────────────────
@@ -110,6 +132,7 @@ def create_camera(camera: Camera):
             raise HTTPException(status_code=409, detail=f"Камера '{camera.name}' уже существует")
         cameras.append(_camera_to_dict(camera))
         _write_config(cameras)
+    _notify_exporter()
     return _camera_to_dict(camera)
 
 
@@ -121,6 +144,7 @@ def update_camera(name: str, camera: Camera):
             if cam["name"] == name:
                 cameras[i] = _camera_to_dict(camera)
                 _write_config(cameras)
+                _notify_exporter()
                 return cameras[i]
     raise HTTPException(status_code=404, detail=f"Камера '{name}' не найдена")
 
@@ -133,6 +157,7 @@ def delete_camera(name: str):
         if len(new_cameras) == len(cameras):
             raise HTTPException(status_code=404, detail=f"Камера '{name}' не найдена")
         _write_config(new_cameras)
+    _notify_exporter()
 
 
 @app.get("/health", summary="Проверка работоспособности сервиса")
