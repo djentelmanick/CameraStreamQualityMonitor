@@ -1,6 +1,6 @@
 # 📹 Camera Stream Quality Monitor — PoC
 
-Proof of Concept для мониторинга качества видеопотоков IP-камер с использованием Prometheus Blackbox Exporter, кастомного RTSP-экспортёра и Grafana.
+Proof of Concept для мониторинга качества видеопотоков IP-камер с использованием Prometheus Blackbox Exporter, кастомного RTSP-экспортёра, VictoriaMetrics и Grafana.
 
 ---
 
@@ -24,15 +24,15 @@ Proof of Concept для мониторинга качества видеопот
 │    │   rtsp-exporter    │   │   blackbox-exporter    │               │
 │    │ Кастомный Python   │   │ Prometheus Blackbox    │               │
 │    │ RTSP OPTIONS probe │   │ ICMP + TCP проверки    │               │
-│    │       :9115        │   │       :9115 (9116)     │               │
+│    │       :9115        │   │       :9116 (→9115)    │               │
 │    └─────────┬──────────┘   └─────────────┬──────────┘               │
 │              │                             │                         │
 │              └──────────────┬──────────────┘                         │
 │                             │                                        │
 │                  ┌──────────▼──────────┐                             │
-│                  │      Prometheus     │                             │
-│                  │    Сбор метрик      │                             │
-│                  │       :9090         │                             │
+│                  │  VictoriaMetrics    │                             │
+│                  │   Сбор метрик       │                             │
+│                  │  :9090 (→8428)      │                             │
 │                  └──────────┬──────────┘                             │
 │                             │                                        │
 │                  ┌──────────▼──────────┐                             │
@@ -96,7 +96,7 @@ docker compose ps
 | Сервис | URL | Логин / Пароль |
 |---|---|---|
 | Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | — |
+| VictoriaMetrics | http://localhost:9090 | — |
 | RTSP Exporter | http://localhost:9115/metrics | — |
 | Blackbox Exporter | http://localhost:9116/metrics | — |
 
@@ -112,7 +112,7 @@ curl "http://localhost:9116/probe?module=tcp_rtsp&target=localhost:8554"
 # ICMP-проверка через Blackbox
 curl "http://localhost:9116/probe?module=icmp_check&target=localhost"
 
-# Запросить метрики через Prometheus API
+# Запросить метрики через VictoriaMetrics API (совместим с Prometheus API)
 curl "http://localhost:9090/api/v1/query?query=camera_up"
 ```
 
@@ -132,12 +132,12 @@ curl "http://localhost:9090/api/v1/query?query=camera_up"
 ├── requirements.txt            # Python-зависимости (устанавливаются при сборке Docker-образа)
 │
 ├── blackbox.yml                # Конфигурация Blackbox Exporter (ICMP, TCP, HTTP, ONVIF)
-├── prometheus.yml              # Конфигурация Prometheus (scrape jobs)
+├── prometheus.yml              # Конфигурация scrape для VictoriaMetrics
 │
 └── grafana/
     ├── provisioning/
     │   ├── datasources/
-    │   │   └── prometheus.yml  # Автоматическое подключение Prometheus
+    │   │   └── prometheus.yml  # Автоматическое подключение VictoriaMetrics
     │   └── dashboards/
     │       └── dashboards.yml  # Автозагрузка дашбордов
     └── dashboards/
@@ -199,7 +199,7 @@ cameras:
 
 ```bash
 docker compose down           # остановить (данные сохранятся)
-docker compose down -v        # остановить и удалить тома (данные Prometheus/Grafana)
+docker compose down -v        # остановить и удалить тома (данные VictoriaMetrics/Grafana)
 ```
 
 ---
@@ -232,7 +232,7 @@ docker compose down -v        # остановить и удалить тома 
 
 | Компонент | Версия |
 |---|---|
-| Prometheus | `v2.51.0` |
+| VictoriaMetrics | `v1.101.0` |
 | Grafana | `10.4.0` |
 | Blackbox Exporter | `v0.25.0` |
 | Python (экспортёр) | `3.12-slim` |

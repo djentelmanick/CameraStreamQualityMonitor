@@ -76,18 +76,18 @@ services:
     networks:
       - monitoring
 
-  # ── Prometheus ────────────────────────────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: prometheus
+  # ── VictoriaMetrics ───────────────────────────────────────────────────────
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.101.0
+    container_name: victoriametrics
     ports:
-      - "9090:9090"
+      - "9090:8428"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/victoriametrics/prometheus.yml:ro
+      - victoriametrics_data:/victoria-metrics-data
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=7d"
+      - "--promscrape.config=/etc/victoriametrics/prometheus.yml"
+      - "--retentionPeriod=7d"
     networks:
       - monitoring
     depends_on:
@@ -112,12 +112,12 @@ services:
     networks:
       - monitoring
     depends_on:
-      - prometheus
+      - victoriametrics
 
 networks:
   monitoring:
     driver: bridge
 
 volumes:
-  prometheus_data:
+  victoriametrics_data:
   grafana_data:

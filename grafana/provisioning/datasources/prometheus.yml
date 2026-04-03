@@ -5,12 +5,12 @@ deleteDatasources:
     orgId: 1
 
 datasources:
-  - name: Prometheus
+  - name: VictoriaMetrics
     uid: prometheus
     type: prometheus
     orgId: 1
     access: proxy
-    url: http://prometheus:9090
+    url: http://victoriametrics:8428
     isDefault: true
     editable: false
     jsonData:

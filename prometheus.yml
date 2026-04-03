@@ -1,16 +1,15 @@
 global:
   scrape_interval: 15s
-  evaluation_interval: 15s
   external_labels:
     environment: "poc"
     project: "camera-monitoring"
 
 scrape_configs:
 
-  # ── Сам Prometheus ────────────────────────────────────────────────────────
-  - job_name: "prometheus"
+  # ── VictoriaMetrics self-monitoring ───────────────────────────────────────
+  - job_name: "victoriametrics"
     static_configs:
-      - targets: ["localhost:9090"]
+      - targets: ["localhost:8428"]
 
   # ── Кастомный RTSP-экспортёр ──────────────────────────────────────────────
   - job_name: "rtsp_cameras"
