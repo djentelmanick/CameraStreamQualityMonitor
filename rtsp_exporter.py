@@ -132,6 +132,14 @@ class MetricsStore:
         with self._lock:
             self._data[camera.name] = (camera, metrics)
 
+    def remove_stale(self, active_names: set):
+        """Удаляет из хранилища камеры, которых больше нет в конфиге."""
+        with self._lock:
+            stale = [name for name in self._data if name not in active_names]
+            for name in stale:
+                log.info(f"Removing stale camera from metrics store: {name}")
+                del self._data[name]
+
     def render_prometheus(self) -> str:
         lines = []
         with self._lock:
@@ -196,6 +204,8 @@ def load_cameras(config_path: str) -> List[CameraConfig]:
 def poll_loop():
     while True:
         cameras = load_cameras(CONFIG_FILE)
+        # Удаляем из хранилища камеры, которые были убраны из конфига
+        store.remove_stale({cam.name for cam in cameras})
         threads = []
         for camera in cameras:
             def task(cam=camera):
