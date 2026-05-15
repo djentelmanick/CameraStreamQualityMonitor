@@ -9,8 +9,8 @@
     "monitoring"
   ],
   "timezone": "browser",
-  "schemaVersion": 38,
-  "version": 3,
+  "schemaVersion": 36,
+  "version": 6,
   "refresh": "15s",
   "time": {
     "from": "now-1h",
@@ -611,18 +611,29 @@
       },
       "targets": [
         {
-          "expr": "camera_rtsp_latency_ms",
-          "legendFormat": "{{camera}} ({{location}})",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "queryType": "live",
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["Time", "latency_ms"]
+            }
+          }
+        }
+      ]
     },
     {
       "id": 21,
@@ -670,18 +681,29 @@
       },
       "targets": [
         {
-          "expr": "camera_rtp_packet_loss_ratio",
-          "legendFormat": "{{camera}} ({{location}})",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "queryType": "live",
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["Time", "packet_loss"]
+            }
+          }
+        }
+      ]
     },
     {
       "id": 22,
@@ -706,18 +728,29 @@
       },
       "targets": [
         {
-          "expr": "camera_rtp_jitter_ms",
-          "legendFormat": "{{camera}}",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "queryType": "live",
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["Time", "jitter_ms"]
+            }
+          }
+        }
+      ]
     },
     {
       "id": 23,
@@ -742,18 +775,29 @@
       },
       "targets": [
         {
-          "expr": "camera_stream_bitrate_kbps",
-          "legendFormat": "{{camera}}",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "queryType": "live",
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["Time", "bitrate_kbps"]
+            }
+          }
+        }
+      ]
     },
     {
       "id": 30,
@@ -1560,18 +1604,29 @@
       },
       "targets": [
         {
-          "expr": "camera_rtsp_latency_ms",
-          "legendFormat": "{{camera}} ({{location}})",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "queryType": "live",
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": ["Time", "latency_ms"]
+            }
+          }
+        }
+      ]
     },
     {
       "id": 82,
@@ -1626,66 +1681,47 @@
       "id": 89,
       "type": "row",
       "title": "🔴 Real-time (Grafana Live)",
-      "gridPos": {"x": 0, "y": 100, "w": 24, "h": 1},
-      "collapsed": false
-    },
-    {
-      "id": 90,
-      "type": "timeseries",
-      "title": "Live: RTSP Latency (мс)",
-      "gridPos": {"x": 0, "y": 101, "w": 12, "h": 8},
-      "datasource": {"type": "grafana", "uid": "-- Grafana --"},
-      "targets": [
-        {
-          "datasource": {"type": "grafana", "uid": "-- Grafana --"},
-          "queryType": "live",
-          "channel": "stream/custom/camera-live",
-          "query": ""
-        }
-      ],
-      "transformations": [
-        {
-          "id": "filterFieldsByName",
-          "options": {"include": {"pattern": "time|.*_latency_ms"}}
-        },
-        {
-          "id": "renameByRegex",
-          "options": {"regex": "(.+)_latency_ms", "renamePattern": "$1"}
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2}
-        }
+      "gridPos": {
+        "x": 0,
+        "y": 100,
+        "w": 24,
+        "h": 1
       },
-      "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"}
-      }
+      "collapsed": false
     },
     {
       "id": 91,
       "type": "timeseries",
       "title": "Live: Camera Up/Down",
-      "gridPos": {"x": 12, "y": 101, "w": 12, "h": 8},
-      "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+      "gridPos": {
+        "x": 12,
+        "y": 101,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
       "targets": [
         {
-          "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
           "queryType": "live",
-          "channel": "stream/custom/camera-live",
-          "query": ""
+          "channel": "stream/cameras/camera_metrics",
+          "refId": "A"
         }
       ],
       "transformations": [
         {
           "id": "filterFieldsByName",
-          "options": {"include": {"pattern": "time|.*_up"}}
-        },
-        {
-          "id": "renameByRegex",
-          "options": {"regex": "(.+)_up", "renamePattern": "$1"}
+          "options": {
+            "include": {
+              "names": ["Time", "up"]
+            }
+          }
         }
       ],
       "fieldConfig": {
@@ -1693,21 +1729,36 @@
           "unit": "short",
           "min": 0,
           "max": 1,
-          "color": {"mode": "palette-classic"},
-          "custom": {"lineWidth": 2},
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 2
+          },
           "mappings": [
             {
               "type": "value",
               "options": {
-                "0": {"text": "DOWN", "color": "red", "index": 0},
-                "1": {"text": "UP", "color": "green", "index": 1}
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
               }
             }
           ]
         }
       },
       "options": {
-        "legend": {"displayMode": "list", "placement": "bottom"}
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       }
     }
   ],
@@ -1742,7 +1793,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "10.4.0"
+      "version": "9.5.0"
     },
     {
       "type": "datasource",

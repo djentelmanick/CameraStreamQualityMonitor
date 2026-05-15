@@ -37,12 +37,13 @@ log = logging.getLogger(__name__)
 # ─── Конфигурация ────────────────────────────────────────────────────────────
 
 CONFIG_FILE = "/app/exporter_config.yml"
-SCRAPE_INTERVAL = 15   # секунд между опросами камер
+SCRAPE_INTERVAL = 1    # секунд между опросами камер
 LISTEN_PORT = 9115
-RTSP_TIMEOUT = 5       # таймаут подключения к камере
+RTSP_TIMEOUT = 2       # таймаут подключения к камере
 VM_PUSH_URL = os.environ.get("VM_PUSH_URL", "http://victoriametrics:8428/api/v1/import/prometheus")
-GRAFANA_LIVE_URL = os.environ.get("GRAFANA_LIVE_URL", "http://grafana:3000/api/live/push/stream/custom/camera-live")
+GRAFANA_BASE_URL = os.environ.get("GRAFANA_BASE_URL", "http://grafana:3000")
 GRAFANA_AUTH = os.environ.get("GRAFANA_AUTH", "admin:admin")
+GRAFANA_STREAM_ID = os.environ.get("GRAFANA_STREAM_ID", "cameras")
 
 # ─── Структуры данных ─────────────────────────────────────────────────────────
 
@@ -198,40 +199,35 @@ def push_to_grafana_live():
     if not items:
         return
 
-    timestamp_ms = int(time.time() * 1000)
-    fields = [{"name": "time", "type": "time"}]
-    values = [[timestamp_ms]]
+    timestamp_ns = int(time.time() * 1_000_000_000)
+    lines = []
 
     for camera, m in items:
-        fields += [
-            {"name": f"{camera.name}_up", "type": "number"},
-            {"name": f"{camera.name}_latency_ms", "type": "number"},
-            {"name": f"{camera.name}_packet_loss", "type": "number"},
-            {"name": f"{camera.name}_jitter_ms", "type": "number"},
-            {"name": f"{camera.name}_bitrate_kbps", "type": "number"},
-        ]
-        values += [[m.up], [m.latency_ms], [m.packet_loss], [m.jitter_ms], [m.bitrate_kbps]]
+        tag_str = f"camera={camera.name}"
+        for k, v in sorted(camera.labels.items()):
+            tag_str += f",{k}={v}"
 
-    frame = {
-        "schema": {"name": "camera-live", "fields": fields},
-        "data": {"values": values},
-    }
-    data = json.dumps(frame).encode("utf-8")
+        field_str = (
+            f"up={int(m.up)}i,"
+            f"latency_ms={m.latency_ms:.4f},"
+            f"packet_loss={m.packet_loss:.6f},"
+            f"jitter_ms={m.jitter_ms:.4f},"
+            f"bitrate_kbps={m.bitrate_kbps:.2f}"
+        )
+        lines.append(f"camera_metrics,{tag_str} {field_str} {timestamp_ns}")
+
+    data = "\n".join(lines).encode("utf-8")
+    url = f"{GRAFANA_BASE_URL}/api/live/push/{GRAFANA_STREAM_ID}"
     auth = base64.b64encode(GRAFANA_AUTH.encode()).decode()
     req = urllib.request.Request(
-        GRAFANA_LIVE_URL,
-        data=data,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Basic {auth}",
-        },
+        url, data=data, method="POST",
+        headers={"Content-Type": "text/plain", "Authorization": f"Basic {auth}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
-            log.info(f"Pushed to Grafana Live, status={resp.status}")
+            log.info(f"Grafana Live push → {resp.status}")
     except Exception as e:
-        log.error(f"Failed to push to Grafana Live: {e}")
+        log.error(f"Grafana Live push failed: {e}")
 
 
 def push_to_vm(metrics_text: str):
