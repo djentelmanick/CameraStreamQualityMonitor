@@ -38,6 +38,7 @@ CONFIG_FILE = "/app/exporter_config.yml"
 SCRAPE_INTERVAL = 15   # секунд между опросами камер
 LISTEN_PORT = 9115
 RTSP_TIMEOUT = 5       # таймаут подключения к камере
+VM_PUSH_URL = os.environ.get("VM_PUSH_URL", "http://victoriametrics:8428/api/v1/import/prometheus")
 
 # ─── Структуры данных ─────────────────────────────────────────────────────────
 
@@ -181,8 +182,22 @@ class MetricsStore:
 
 store = MetricsStore()
 
-# Event для немедленного пробуждения поллера при изменении конфига
 config_changed = threading.Event()
+
+
+def push_to_vm(metrics_text: str):
+    data = metrics_text.encode("utf-8")
+    req = urllib.request.Request(
+        VM_PUSH_URL,
+        data=data,
+        method="POST",
+        headers={"Content-Type": "text/plain"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            log.info(f"Pushed metrics to VM, status={resp.status}")
+    except Exception as e:
+        log.error(f"Failed to push metrics to VM: {e}")
 
 
 # ─── Фоновый поллер ──────────────────────────────────────────────────────────
@@ -225,7 +240,7 @@ def poll_loop():
             threads.append(t)
         for t in threads:
             t.join()
-        # Ждём либо истечения интервала, либо сигнала об изменении конфига
+        push_to_vm(store.render_prometheus())
         config_changed.wait(timeout=SCRAPE_INTERVAL)
         config_changed.clear()
 
