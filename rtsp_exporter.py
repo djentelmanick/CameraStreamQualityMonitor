@@ -20,6 +20,8 @@ import logging
 import threading
 import urllib.request
 import urllib.error
+import base64
+import json
 import yaml
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dataclasses import dataclass, field
@@ -39,6 +41,8 @@ SCRAPE_INTERVAL = 15   # секунд между опросами камер
 LISTEN_PORT = 9115
 RTSP_TIMEOUT = 5       # таймаут подключения к камере
 VM_PUSH_URL = os.environ.get("VM_PUSH_URL", "http://victoriametrics:8428/api/v1/import/prometheus")
+GRAFANA_LIVE_URL = os.environ.get("GRAFANA_LIVE_URL", "http://grafana:3000/api/live/push/stream/custom/camera-live")
+GRAFANA_AUTH = os.environ.get("GRAFANA_AUTH", "admin:admin")
 
 # ─── Структуры данных ─────────────────────────────────────────────────────────
 
@@ -136,6 +140,10 @@ class MetricsStore:
         with self._lock:
             self._data[camera.name] = (camera, metrics)
 
+    def snapshot(self) -> list:
+        with self._lock:
+            return list(self._data.values())
+
     def remove_stale(self, active_names: set):
         """Удаляет из хранилища камеры, которых больше нет в конфиге."""
         with self._lock:
@@ -183,6 +191,47 @@ class MetricsStore:
 store = MetricsStore()
 
 config_changed = threading.Event()
+
+
+def push_to_grafana_live():
+    items = store.snapshot()
+    if not items:
+        return
+
+    timestamp_ms = int(time.time() * 1000)
+    fields = [{"name": "time", "type": "time"}]
+    values = [[timestamp_ms]]
+
+    for camera, m in items:
+        fields += [
+            {"name": f"{camera.name}_up", "type": "number"},
+            {"name": f"{camera.name}_latency_ms", "type": "number"},
+            {"name": f"{camera.name}_packet_loss", "type": "number"},
+            {"name": f"{camera.name}_jitter_ms", "type": "number"},
+            {"name": f"{camera.name}_bitrate_kbps", "type": "number"},
+        ]
+        values += [[m.up], [m.latency_ms], [m.packet_loss], [m.jitter_ms], [m.bitrate_kbps]]
+
+    frame = {
+        "schema": {"name": "camera-live", "fields": fields},
+        "data": {"values": values},
+    }
+    data = json.dumps(frame).encode("utf-8")
+    auth = base64.b64encode(GRAFANA_AUTH.encode()).decode()
+    req = urllib.request.Request(
+        GRAFANA_LIVE_URL,
+        data=data,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {auth}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            log.info(f"Pushed to Grafana Live, status={resp.status}")
+    except Exception as e:
+        log.error(f"Failed to push to Grafana Live: {e}")
 
 
 def push_to_vm(metrics_text: str):
@@ -241,6 +290,7 @@ def poll_loop():
         for t in threads:
             t.join()
         push_to_vm(store.render_prometheus())
+        push_to_grafana_live()
         config_changed.wait(timeout=SCRAPE_INTERVAL)
         config_changed.clear()
 
