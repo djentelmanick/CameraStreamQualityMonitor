@@ -216,6 +216,10 @@ def push_to_grafana_live():
         )
         lines.append(f"camera_metrics,{tag_str} {field_str} {timestamp_ns}")
 
+    online = sum(1 for _, m in items if m.up >= 0.5)
+    offline = len(items) - online
+    lines.append(f"camera_summary online={online}i,offline={offline}i,total={len(items)}i {timestamp_ns}")
+
     data = "\n".join(lines).encode("utf-8")
     url = f"{GRAFANA_BASE_URL}/api/live/push/{GRAFANA_STREAM_ID}"
     auth = base64.b64encode(GRAFANA_AUTH.encode()).decode()
