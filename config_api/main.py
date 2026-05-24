@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
-"""
-config_api/main.py — FastAPI-сервис для управления конфигурацией камер.
-
-Предоставляет REST API для чтения и изменения exporter_config.yml,
-который используется кастомным RTSP-экспортёром.
-"""
 
 import os
 import logging
 import threading
 import urllib.request
 import urllib.error
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/exporter_config.yml")
-# URL экспортёра для уведомления об изменении конфига (POST /reload)
 EXPORTER_URL = os.environ.get("EXPORTER_URL", "http://rtsp-exporter:9115")
 
 app = FastAPI(
@@ -41,42 +34,32 @@ _lock = threading.Lock()
 
 
 def _notify_exporter() -> None:
-    """Уведомляет rtsp-exporter об изменении конфига через POST /reload.
-    Вызывается после create/update/delete камеры — поллер немедленно просыпается
-    и подхватывает изменения, не дожидаясь конца SCRAPE_INTERVAL (15 сек).
-    """
     url = f"{EXPORTER_URL}/reload"
     req = urllib.request.Request(url, data=b"", method="POST")
     try:
         with urllib.request.urlopen(req, timeout=2):
             pass
     except urllib.error.URLError as e:
-        # Не критично: поллер всё равно подхватит изменения на следующей итерации
         log.warning(f"Could not notify exporter: {e}")
 
-
-# ─── Модели ──────────────────────────────────────────────────────────────────
 
 class CameraLabels(BaseModel):
     location: Optional[str] = ""
     building: Optional[str] = ""
 
     class Config:
-        extra = "allow"  # разрешаем произвольные лейблы
+        extra = "allow"
 
 
 class Camera(BaseModel):
-    name: str = Field(..., description="Уникальное имя камеры")
-    host: str = Field(..., description="IP-адрес или hostname камеры")
-    port: int = Field(554, description="RTSP-порт (обычно 554)")
-    path: str = Field("/", description="RTSP-путь потока")
+    name: str
+    host: str
+    port: int = 554
+    path: str = "/"
     labels: CameraLabels = Field(default_factory=CameraLabels)
 
 
-# ─── Вспомогательные функции ─────────────────────────────────────────────────
-
 def _read_config() -> List[dict]:
-    """Читает список камер из YAML-файла."""
     try:
         with open(CONFIG_PATH, "r") as f:
             data = yaml.safe_load(f) or {}
@@ -88,7 +71,6 @@ def _read_config() -> List[dict]:
 
 
 def _write_config(cameras: List[dict]) -> None:
-    """Записывает список камер в YAML-файл."""
     try:
         with open(CONFIG_PATH, "w") as f:
             yaml.dump({"cameras": cameras}, f, allow_unicode=True, default_flow_style=False)
@@ -106,15 +88,13 @@ def _camera_to_dict(camera: Camera) -> dict:
     }
 
 
-# ─── Эндпоинты ───────────────────────────────────────────────────────────────
-
-@app.get("/cameras", response_model=List[dict], summary="Получить список всех камер")
+@app.get("/cameras", response_model=List[dict])
 def list_cameras():
     with _lock:
         return _read_config()
 
 
-@app.get("/cameras/{name}", response_model=dict, summary="Получить камеру по имени")
+@app.get("/cameras/{name}", response_model=dict)
 def get_camera(name: str):
     with _lock:
         cameras = _read_config()
@@ -124,7 +104,7 @@ def get_camera(name: str):
     raise HTTPException(status_code=404, detail=f"Камера '{name}' не найдена")
 
 
-@app.post("/cameras", response_model=dict, status_code=201, summary="Добавить новую камеру")
+@app.post("/cameras", response_model=dict, status_code=201)
 def create_camera(camera: Camera):
     with _lock:
         cameras = _read_config()
@@ -136,7 +116,7 @@ def create_camera(camera: Camera):
     return _camera_to_dict(camera)
 
 
-@app.put("/cameras/{name}", response_model=dict, summary="Обновить камеру по имени")
+@app.put("/cameras/{name}", response_model=dict)
 def update_camera(name: str, camera: Camera):
     with _lock:
         cameras = _read_config()
@@ -149,7 +129,7 @@ def update_camera(name: str, camera: Camera):
     raise HTTPException(status_code=404, detail=f"Камера '{name}' не найдена")
 
 
-@app.delete("/cameras/{name}", status_code=204, summary="Удалить камеру по имени")
+@app.delete("/cameras/{name}", status_code=204)
 def delete_camera(name: str):
     with _lock:
         cameras = _read_config()
@@ -160,6 +140,6 @@ def delete_camera(name: str):
     _notify_exporter()
 
 
-@app.get("/health", summary="Проверка работоспособности сервиса")
+@app.get("/health")
 def health():
     return {"status": "ok", "config_path": CONFIG_PATH}

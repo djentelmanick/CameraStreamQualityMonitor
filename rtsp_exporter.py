@@ -1,31 +1,16 @@
 #!/usr/bin/env python3
-"""
-rtsp_exporter.py — Кастомный Prometheus-экспортёр для мониторинга RTSP/RTP-потоков.
-
-Собирает метрики:
-  - camera_up                   (1/0 — доступность)
-  - camera_rtsp_latency_ms      (задержка подключения, мс)
-  - camera_rtp_packet_loss_ratio (доля потерянных пакетов 0..1)
-  - camera_rtp_jitter_ms        (джиттер, мс)
-  - camera_stream_bitrate_kbps  (битрейт потока, кбит/с)
-  - camera_last_scrape_timestamp (unix-время последнего опроса)
-"""
 
 import os
 import time
 import socket
-import struct
-import random
 import logging
 import threading
 import urllib.request
-import urllib.error
 import base64
-import json
 import yaml
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,18 +19,15 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ─── Конфигурация ────────────────────────────────────────────────────────────
-
 CONFIG_FILE = "/app/exporter_config.yml"
-SCRAPE_INTERVAL = 1    # секунд между опросами камер
+SCRAPE_INTERVAL = 1
 LISTEN_PORT = 9115
-RTSP_TIMEOUT = 2       # таймаут подключения к камере
+RTSP_TIMEOUT = 2
 VM_PUSH_URL = os.environ.get("VM_PUSH_URL", "http://victoriametrics:8428/api/v1/import/prometheus")
 GRAFANA_BASE_URL = os.environ.get("GRAFANA_BASE_URL", "http://grafana:3000")
 GRAFANA_AUTH = os.environ.get("GRAFANA_AUTH", "admin:admin")
 GRAFANA_STREAM_ID = os.environ.get("GRAFANA_STREAM_ID", "cameras")
 
-# ─── Структуры данных ─────────────────────────────────────────────────────────
 
 @dataclass
 class CameraConfig:
@@ -67,14 +49,7 @@ class CameraMetrics:
     error: str = ""
 
 
-# ─── Сбор метрик ─────────────────────────────────────────────────────────────
-
 def probe_rtsp(camera: CameraConfig) -> CameraMetrics:
-    """
-    Подключается к RTSP-эндпоинту по TCP и отправляет минимальный RTSP OPTIONS-запрос.
-    Измеряет round-trip latency. Остальные метрики получаем из специального
-    заголовка X-RTP-Stats (который отдаёт наш mock-сервер) или вычисляем эвристически.
-    """
     m = CameraMetrics(last_scrape=time.time())
     rtsp_url = f"rtsp://{camera.host}:{camera.port}{camera.path}"
 
@@ -83,7 +58,6 @@ def probe_rtsp(camera: CameraConfig) -> CameraMetrics:
         sock = socket.create_connection((camera.host, camera.port), timeout=RTSP_TIMEOUT)
         connect_ms = (time.perf_counter() - t0) * 1000
 
-        # Отправляем RTSP OPTIONS — минимальный валидный запрос
         request = (
             f"OPTIONS {rtsp_url} RTSP/1.0\r\n"
             f"CSeq: 1\r\n"
@@ -102,7 +76,6 @@ def probe_rtsp(camera: CameraConfig) -> CameraMetrics:
             m.up = 1.0
             m.latency_ms = round(rtt_ms, 2)
 
-            # Парсим опциональные заголовки из mock-сервера
             for line in response.splitlines():
                 if line.startswith("X-RTP-PacketLoss:"):
                     m.packet_loss = float(line.split(":")[1].strip())
@@ -130,8 +103,6 @@ def probe_rtsp(camera: CameraConfig) -> CameraMetrics:
     return m
 
 
-# ─── Хранилище метрик ─────────────────────────────────────────────────────────
-
 class MetricsStore:
     def __init__(self):
         self._lock = threading.Lock()
@@ -146,7 +117,6 @@ class MetricsStore:
             return list(self._data.values())
 
     def remove_stale(self, active_names: set):
-        """Удаляет из хранилища камеры, которых больше нет в конфиге."""
         with self._lock:
             stale = [name for name in self._data if name not in active_names]
             for name in stale:
@@ -164,7 +134,6 @@ class MetricsStore:
                 base += f',{k}="{v}"'
             return "{" + base + "}"
 
-        # Метаданные метрик
         defs = [
             ("camera_up", "gauge", "Camera RTSP endpoint availability (1=up, 0=down)"),
             ("camera_rtsp_latency_ms", "gauge", "RTSP connection round-trip latency in milliseconds"),
@@ -249,8 +218,6 @@ def push_to_vm(metrics_text: str):
         log.error(f"Failed to push metrics to VM: {e}")
 
 
-# ─── Фоновый поллер ──────────────────────────────────────────────────────────
-
 def load_cameras(config_path: str) -> List[CameraConfig]:
     try:
         with open(config_path) as f:
@@ -274,7 +241,6 @@ def load_cameras(config_path: str) -> List[CameraConfig]:
 def poll_loop():
     while True:
         cameras = load_cameras(CONFIG_FILE)
-        # Удаляем из хранилища камеры, которые были убраны из конфига
         store.remove_stale({cam.name for cam in cameras})
         threads = []
         for camera in cameras:
@@ -295,8 +261,6 @@ def poll_loop():
         config_changed.clear()
 
 
-# ─── HTTP-сервер для Prometheus ───────────────────────────────────────────────
-
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/metrics", "/"):
@@ -312,7 +276,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/reload":
-            # Немедленно будим поллер — новая/удалённая камера подхватится без ожидания
             config_changed.set()
             log.info("Config reload triggered via POST /reload")
             body = b'{"status":"ok"}'
@@ -326,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def log_message(self, fmt, *args):
-        pass  # подавляем стандартный лог HTTP
+        pass
 
 
 if __name__ == "__main__":

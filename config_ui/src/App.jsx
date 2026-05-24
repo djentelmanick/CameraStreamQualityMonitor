@@ -10,7 +10,7 @@ export default function App() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [editTarget, setEditTarget] = useState(null) // null = добавление, object = редактирование
+  const [editTarget, setEditTarget] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)

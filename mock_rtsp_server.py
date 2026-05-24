@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
-mock_rtsp_server.py — Имитирует IP-камеру, отвечая на RTSP OPTIONS-запросы.
-
-Параметры задаются через переменные окружения:
-  CAMERA_ID    — имя камеры (default: camera-1)
-  LATENCY_MS   — искусственная задержка ответа в мс (default: 50)
-  PACKET_LOSS  — доля потерянных пакетов 0..1 (default: 0.02)
-  BITRATE_KBPS — имитируемый битрейт потока (default: 2048)
-  PORT         — порт для прослушивания (default: 8554)
-"""
 
 import os
 import time
@@ -16,7 +6,6 @@ import socket
 import random
 import logging
 import threading
-import math
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,7 +20,7 @@ PACKET_LOSS  = float(os.environ.get("PACKET_LOSS", "0.02"))
 BITRATE_KBPS = float(os.environ.get("BITRATE_KBPS", "2048"))
 PORT         = int(os.environ.get("PORT", "8554"))
 
-# Небольшое колебание метрик — имитируем реальную сеть
+
 def jitter_value(base: float, pct: float = 0.15) -> float:
     noise = base * pct * (random.random() * 2 - 1)
     return max(0.0, base + noise)
@@ -43,20 +32,16 @@ def handle_client(conn: socket.socket, addr):
         if not data:
             return
 
-        # Имитируем случайный packet loss — иногда не отвечаем вовсе
         if random.random() < PACKET_LOSS * 0.3:
             log.debug(f"[{CAMERA_ID}] Simulating dropped connection from {addr}")
             conn.close()
             return
 
-        # Искусственная задержка (латентность сети/камеры)
         delay_s = jitter_value(LATENCY_MS) / 1000.0
         time.sleep(delay_s)
 
-        # Вычисляем динамический джиттер
         jitter_ms = round(jitter_value(LATENCY_MS * 0.2, pct=0.5), 2)
 
-        # Формируем RTSP ответ с метриками в заголовках
         response = (
             "RTSP/1.0 200 OK\r\n"
             "CSeq: 1\r\n"

@@ -1,6 +1,3 @@
-// Конфиг для локальной разработки (npm run dev:local)
-// Проксирует API-запросы на локально запущенный config-api (localhost:8000)
-// В Docker используется vite.config.js + nginx.conf
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
