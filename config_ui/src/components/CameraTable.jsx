@@ -12,6 +12,7 @@ export default function CameraTable({ cameras, onEdit, onDelete }) {
         <thead>
           <tr>
             <th>Имя</th>
+            <th>Тип</th>
             <th>Host</th>
             <th>Порт</th>
             <th>Путь</th>
@@ -24,6 +25,7 @@ export default function CameraTable({ cameras, onEdit, onDelete }) {
           {cameras.map(cam => (
             <tr key={cam.name}>
               <td><code>{cam.name}</code></td>
+              <td>{cam.vendor || '—'}</td>
               <td>{cam.host}</td>
               <td>{cam.port}</td>
               <td><code>{cam.path}</code></td>

@@ -5,14 +5,14 @@ import logging
 import threading
 import urllib.request
 import urllib.error
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 log = logging.getLogger(__name__)
 
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/exporter_config.yml")
 EXPORTER_URL = os.environ.get("EXPORTER_URL", "http://rtsp-exporter:9115")
@@ -54,9 +54,20 @@ class CameraLabels(BaseModel):
 class Camera(BaseModel):
     name: str
     host: str
-    port: int = 554
+    port: Optional[int] = None
     path: str = "/"
+    vendor: Literal["", "mock", "hikvision", "generic"] = ""
+    channel: int = Field(101, ge=101, le=302)
+    username: str = ""
+    password: str = ""
     labels: CameraLabels = Field(default_factory=CameraLabels)
+
+    @field_validator("vendor", mode="before")
+    @classmethod
+    def normalize_vendor(cls, v):
+        if v is None:
+            return ""
+        return str(v).strip().lower()
 
 
 def _read_config() -> List[dict]:
@@ -79,13 +90,23 @@ def _write_config(cameras: List[dict]) -> None:
 
 
 def _camera_to_dict(camera: Camera) -> dict:
-    return {
+    data = {
         "name": camera.name,
         "host": camera.host,
-        "port": camera.port,
         "path": camera.path,
         "labels": camera.labels.model_dump(),
     }
+    if camera.port is not None:
+        data["port"] = camera.port
+    if camera.vendor:
+        data["vendor"] = camera.vendor
+    if camera.vendor == "hikvision":
+        data["channel"] = camera.channel
+    if camera.username:
+        data["username"] = camera.username
+    if camera.password:
+        data["password"] = camera.password
+    return data
 
 
 @app.get("/cameras", response_model=List[dict])
@@ -122,7 +143,10 @@ def update_camera(name: str, camera: Camera):
         cameras = _read_config()
         for i, cam in enumerate(cameras):
             if cam["name"] == name:
-                cameras[i] = _camera_to_dict(camera)
+                updated = _camera_to_dict(camera)
+                if not camera.password and cam.get("password"):
+                    updated["password"] = cam["password"]
+                cameras[i] = updated
                 _write_config(cameras)
                 _notify_exporter()
                 return cameras[i]

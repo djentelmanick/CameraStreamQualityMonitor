@@ -214,7 +214,7 @@ curl -X POST http://localhost:8000/cameras \
   }'
 ```
 
-Экспортёр автоматически подхватит изменения при следующем цикле опроса (каждые 15 сек).
+После сохранения config-api сразу шлёт экспортёру `POST /reload` — поллер просыпается и перечитывает конфиг без ожидания. Цикл опроса камер — раз в **1 сек** (`SCRAPE_INTERVAL`). Если править `exporter_config.yml` вручную, вызовите `curl -X POST http://localhost:9115/reload` или дождитесь следующего цикла (~1 сек).
 
 ### Config API — эндпоинты
 
@@ -287,11 +287,29 @@ docker compose down -v        # остановить и удалить тома 
 ## 🔭 Как работает RTSP-экспортёр
 
 1. Читает список камер из [`exporter_config.yml`](exporter_config.yml)
-2. Каждые 15 секунд параллельно опрашивает все камеры в отдельных потоках
-3. Отправляет `RTSP OPTIONS` запрос на TCP-порт камеры
-4. Измеряет RTT (round-trip time) как `camera_rtsp_latency_ms`
-5. Парсит дополнительные заголовки `X-RTP-PacketLoss`, `X-RTP-Jitter`, `X-RTP-Bitrate` из ответа mock-сервера
-6. Экспонирует метрики в формате Prometheus на `:9115/metrics`
+2. Параллельно опрашивает все камеры в отдельных потоках
+3. **Mock-камеры** (`vendor: mock`): `RTSP OPTIONS` без авторизации
+4. **Hikvision** (`vendor: hikvision`): `RTSP DESCRIBE` на `/Streaming/Channels/101` (или `102` для субпотока) с **Digest-авторизацией**
+5. Измеряет RTT как `camera_rtsp_latency_ms`
+6. **Hikvision**: `bitrate` — из ISAPI (`constantBitRate`) или SDP (`b=AS`); `loss`/`jitter` — только у mock (реальная камера их по RTSP не отдаёт)
+7. Экспонирует метрики на `:9115/metrics`
+
+### Подключение Hikvision
+
+Пример конфига: [`exporter_config.hikvision.example.yml`](exporter_config.hikvision.example.yml)
+
+```yaml
+cameras:
+  - name: hikvision-1
+    vendor: hikvision
+    host: 192.168.1.64
+    port: 554
+    channel: 101          # основной поток; 102 — субпоток
+    username: admin
+    password: secret
+```
+
+Через Config UI выберите тип **Hikvision**, укажите IP, логин и пароль. Путь `/Streaming/Channels/101` подставится автоматически.
 
 При сборке Docker-образа [`Dockerfile.exporter`](Dockerfile.exporter) устанавливает зависимости из [`requirements.txt`](requirements.txt) командой `pip install -r requirements.txt`.
 
@@ -307,7 +325,7 @@ docker compose down -v        # остановить и удалить тома 
 - **Редактирование** параметров существующей камеры
 - **Удаление** камеры из конфигурации
 
-Изменения сохраняются в [`exporter_config.yml`](exporter_config.yml) через [`config-api`](config_api/main.py) и подхватываются экспортёром автоматически.
+Изменения сохраняются в [`exporter_config.yml`](exporter_config.yml) через [`config-api`](config_api/main.py); экспортёр подхватывает их сразу через `POST /reload`.
 
 Swagger UI для прямой работы с API: http://localhost:8000/docs
 

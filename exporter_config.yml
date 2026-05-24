@@ -6,6 +6,7 @@ cameras:
   name: camera-1
   path: /
   port: 8554
+  vendor: mock
 - host: mock-camera-2
   labels:
     building: B
@@ -13,6 +14,7 @@ cameras:
   name: camera-2
   path: /
   port: 8554
+  vendor: mock
 - host: mock-camera-3
   labels:
     building: A
@@ -20,3 +22,15 @@ cameras:
   name: camera-3
   path: /
   port: 8554
+  vendor: mock
+- channel: 101
+  host: 172.18.212.18
+  labels:
+    building: main
+    location: lab
+  name: hikvision-dome
+  password: ***
+  path: /
+  port: 554
+  username: admin
+  vendor: hikvision

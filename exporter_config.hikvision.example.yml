@@ -1,0 +1,11 @@
+cameras:
+  - name: hikvision-entrance
+    vendor: hikvision
+    host: 192.168.1.64
+    port: 554
+    channel: 101
+    username: admin
+    password: CHANGE_ME
+    labels:
+      location: entrance
+      building: A
