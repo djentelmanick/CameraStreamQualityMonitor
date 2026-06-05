@@ -127,6 +127,30 @@
     }
     .btn-ghost:hover { background: rgba(255,255,255,.07); }
 
+    /* ── REPO DROPDOWN ── */
+    .repo-dropdown { position: relative; display: inline-flex; }
+    .repo-dropdown button { outline: none; border: none; }
+    .repo-dropdown-menu {
+      display: none; position: absolute; top: calc(100% + 8px); left: 0;
+      min-width: 220px; background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      z-index: 10;
+    }
+    .repo-dropdown.open .repo-dropdown-menu { display: block; }
+    .repo-dropdown-menu a {
+      display: flex; align-items: center; gap: .7rem;
+      padding: .7rem 1rem; color: var(--text); text-decoration: none;
+      font-size: .88rem; font-weight: 500;
+      transition: background .15s;
+    }
+    .repo-dropdown-menu a svg { flex-shrink: 0; }
+    .repo-dropdown-menu a:hover { background: rgba(91,141,238,.12); }
+    .repo-dropdown-menu a + a { border-top: 1px solid var(--border); }
+    .repo-dropdown-menu .repo-label { display: flex; flex-direction: column; gap: 1px; }
+    .repo-dropdown-menu .repo-label span { display: block; line-height: 1.3; }
+    .repo-dropdown-menu .repo-label small { display: block; font-size: .73rem; color: var(--muted); font-weight: 400; line-height: 1.3; }
+
     .hero-stats {
       display: flex; gap: 2.5rem; justify-content: center; flex-wrap: wrap;
       margin-top: 3.5rem; padding-top: 2.5rem;
@@ -347,9 +371,21 @@
     <a href="#quickstart">Запуск</a>
     <a href="#team">Команда</a>
   </div>
-  <a class="nav-cta" href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
-    Репозиторий →
-  </a>
+  <div class="repo-dropdown" id="navRepoDropdown">
+    <button class="nav-cta" onclick="toggleNavRepoDropdown(event)" type="button" style="cursor:pointer;border:none;">
+      Репозиторий ↓
+    </button>
+    <div class="repo-dropdown-menu" style="right:0;left:auto;">
+      <a href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        <span class="repo-label"><span>GitLab МИЭМ</span><small>git.miem.hse.ru</small></span>
+      </a>
+      <a href="https://github.com/djentelmanick/CameraStreamQualityMonitor" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        <span class="repo-label"><span>GitHub</span><small>github.com/djentelmanick</small></span>
+      </a>
+    </div>
+  </div>
 </nav>
 
 
@@ -370,10 +406,23 @@
       VictoriaMetrics и Grafana — всё в одном Docker Compose.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
-        Открыть репозиторий
-      </a>
+      <div class="repo-dropdown" id="repoDropdown">
+        <button class="btn btn-primary" onclick="toggleRepoDropdown(event)" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          Открыть репозиторий
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="repo-dropdown-menu">
+          <a href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+            <span class="repo-label"><span>GitLab МИЭМ</span><small>git.miem.hse.ru</small></span>
+          </a>
+          <a href="https://github.com/djentelmanick/CameraStreamQualityMonitor" target="_blank" rel="noopener">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+            <span class="repo-label"><span>GitHub</span><small>github.com/djentelmanick</small></span>
+          </a>
+        </div>
+      </div>
       <a class="btn btn-ghost" href="#quickstart">
         Быстрый старт
       </a>
@@ -529,31 +578,31 @@
     <div class="screenshots-grid">
 
       <div class="screenshot-card wide" onclick="openLightbox(this.querySelector('img').src)">
-        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.24.png"
+        <img src="Screenshot/Screenshot 2026-06-05 at 18.39.24.png"
              alt="Grafana dashboard — общая сводка" loading="lazy" />
         <div class="cap"><span class="dot-sm"></span>Grafana · Обзорный дашборд — stat-панели, таблица состояния камер, графики задержки и битрейта</div>
       </div>
 
       <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
-        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.50.png"
+        <img src="Screenshot/Screenshot 2026-06-05 at 18.39.50.png"
              alt="Grafana — Heatmap и Gauge" loading="lazy" />
         <div class="cap"><span class="dot-sm"></span>Grafana · Heatmap потерь пакетов, gauge latency и packet loss, аномалии</div>
       </div>
 
       <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
-        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.38.png"
+        <img src="Screenshot/Screenshot 2026-06-05 at 18.39.38.png"
              alt="Grafana — Blackbox и SLA" loading="lazy" />
         <div class="cap"><span class="dot-sm"></span>Grafana · TCP-доступность Blackbox, SLA uptime, heatmap задержек</div>
       </div>
 
       <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
-        <img src="../Screenshot/Screenshot 2026-06-05 at 18.41.26.png"
+        <img src="Screenshot/Screenshot 2026-06-05 at 18.41.26.png"
              alt="Config UI — управление камерами" loading="lazy" />
         <div class="cap"><span class="dot-sm"></span>Config UI · React-интерфейс управления камерами — добавление, редактирование, удаление</div>
       </div>
 
       <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
-        <img src="../Screenshot/Screenshot 2026-06-05 at 18.42.01.png"
+        <img src="Screenshot/Screenshot 2026-06-05 at 18.42.01.png"
              alt="Swagger API" loading="lazy" />
         <div class="cap"><span class="dot-sm"></span>Config API · Swagger UI — полный REST CRUD для управления камерами</div>
       </div>
@@ -722,6 +771,10 @@
       git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter
     </a>
     &nbsp;·&nbsp;
+    <a href="https://github.com/djentelmanick/CameraStreamQualityMonitor" target="_blank" rel="noopener">
+      github.com/djentelmanick/CameraStreamQualityMonitor
+    </a>
+    &nbsp;·&nbsp;
     МИЭМ НИУ ВШЭ · 2026
     &nbsp;·&nbsp;
     Плясов Николай, Чашкин Федор
@@ -745,6 +798,21 @@
     document.body.style.overflow = '';
   }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+  function toggleRepoDropdown(e) {
+    e.stopPropagation();
+    document.getElementById('navRepoDropdown').classList.remove('open');
+    document.getElementById('repoDropdown').classList.toggle('open');
+  }
+  function toggleNavRepoDropdown(e) {
+    e.stopPropagation();
+    document.getElementById('repoDropdown').classList.remove('open');
+    document.getElementById('navRepoDropdown').classList.toggle('open');
+  }
+  document.addEventListener('click', () => {
+    document.getElementById('repoDropdown').classList.remove('open');
+    document.getElementById('navRepoDropdown').classList.remove('open');
+  });
 </script>
 
 </body>

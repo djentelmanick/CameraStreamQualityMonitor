@@ -23,14 +23,14 @@ cameras:
   path: /
   port: 8554
   vendor: mock
-- channel: 101
-  host: 172.18.212.18
-  labels:
-    building: main
-    location: lab
-  name: hikvision-dome
-  password: ***
-  path: /
-  port: 554
-  username: admin
-  vendor: hikvision
+# - channel: 101
+#   host: 172.18.212.18
+#   labels:
+#     building: main
+#     location: lab
+#   name: hikvision-dome
+#   password: ***
+#   path: /
+#   port: 554
+#   username: admin
+#   vendor: hikvision
