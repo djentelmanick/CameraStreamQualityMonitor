@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Camera Stream Quality Monitor — PoC</title>
+  <meta name="description" content="Мониторинг качества видеопотоков IP-камер с Prometheus, кастомным RTSP-экспортёром, VictoriaMetrics и Grafana. Учебный проект МИЭМ НИУ ВШЭ 2026." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --bg2:       #161b27;
+      --bg3:       #1e2535;
+      --border:    #2a3248;
+      --accent:    #5b8dee;
+      --accent2:   #3dd68c;
+      --accent3:   #f9a84d;
+      --text:      #e2e8f0;
+      --muted:     #8892a4;
+      --radius:    12px;
+      --font:      'Inter', system-ui, sans-serif;
+      --mono:      'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(16px);
+      background: rgba(15, 17, 23, 0.85);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: .6rem;
+      font-weight: 700; font-size: .95rem; color: var(--text);
+      text-decoration: none;
+    }
+    .nav-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: .9rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--accent); color: #fff; padding: .4rem 1rem;
+      border-radius: 6px; text-decoration: none; font-size: .85rem; font-weight: 600;
+      transition: opacity .2s;
+    }
+    .nav-cta:hover { opacity: .85; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 90vh;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 5rem 1.5rem 4rem;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 70% 60% at 50% -10%, rgba(91,141,238,.18) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 80% 100%, rgba(61,214,140,.10) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(91,141,238,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91,141,238,.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+    .hero-inner { position: relative; max-width: 760px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: .45rem;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: .3rem .9rem; font-size: .78rem; color: var(--muted);
+      margin-bottom: 1.6rem;
+      background: rgba(255,255,255,.03);
+    }
+    .hero-badge .pill {
+      background: var(--accent2); color: #0d1a12;
+      font-size: .68rem; font-weight: 700; padding: .1rem .45rem; border-radius: 999px;
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800; line-height: 1.15; letter-spacing: -.02em;
+      margin-bottom: 1.2rem;
+    }
+    h1 span { color: var(--accent); }
+    .hero-sub {
+      font-size: 1.05rem; color: var(--muted); max-width: 560px;
+      margin: 0 auto 2.4rem;
+    }
+    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .7rem 1.5rem; border-radius: 8px;
+      font-size: .95rem; font-weight: 600; text-decoration: none;
+      transition: transform .15s, opacity .15s, box-shadow .15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+      box-shadow: 0 0 24px rgba(91,141,238,.35);
+    }
+    .btn-primary:hover { box-shadow: 0 0 32px rgba(91,141,238,.5); }
+    .btn-ghost {
+      border: 1px solid var(--border); color: var(--text);
+      background: rgba(255,255,255,.03);
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.07); }
+
+    .hero-stats {
+      display: flex; gap: 2.5rem; justify-content: center; flex-wrap: wrap;
+      margin-top: 3.5rem; padding-top: 2.5rem;
+      border-top: 1px solid var(--border);
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat .val { font-size: 1.6rem; font-weight: 800; color: var(--accent); display: block; }
+    .hero-stat .lbl { font-size: .78rem; color: var(--muted); margin-top: .1rem; }
+
+    /* ── SECTIONS ── */
+    section { padding: 5rem 1.5rem; }
+    .container { max-width: 1080px; margin: 0 auto; }
+    .section-label {
+      font-size: .75rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: .6rem;
+    }
+    .section-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; margin-bottom: .8rem; }
+    .section-sub { color: var(--muted); font-size: 1rem; max-width: 560px; margin-bottom: 3rem; }
+
+    /* ── TECH STACK ── */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .tech-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.3rem 1.2rem;
+      display: flex; align-items: flex-start; gap: 1rem;
+      transition: border-color .2s, background .2s;
+    }
+    .tech-card:hover { border-color: var(--accent); background: var(--bg3); }
+    .tech-icon {
+      width: 40px; height: 40px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; flex-shrink: 0;
+    }
+    .tech-card h3 { font-size: .9rem; font-weight: 700; margin-bottom: .2rem; }
+    .tech-card p { font-size: .8rem; color: var(--muted); }
+
+    /* ── METRICS ── */
+    .metrics-table-wrap {
+      overflow-x: auto; border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--bg3); }
+    th {
+      padding: .75rem 1rem; text-align: left;
+      font-size: .78rem; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: .7rem 1rem; font-size: .88rem;
+      border-bottom: 1px solid rgba(42,50,72,.6);
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(91,141,238,.04); }
+    .badge {
+      display: inline-block; padding: .15rem .55rem; border-radius: 4px;
+      font-size: .75rem; font-weight: 600; font-family: var(--mono);
+    }
+    .badge-gauge  { background: rgba(91,141,238,.2);  color: var(--accent); }
+    .badge-metric { background: rgba(61,214,140,.15); color: var(--accent2); }
+    code {
+      font-family: var(--mono); font-size: .85em;
+      color: var(--accent2); background: rgba(61,214,140,.1);
+      padding: .1rem .35rem; border-radius: 4px;
+    }
+
+    /* ── SCREENSHOTS ── */
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+    .screenshot-card {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden; background: var(--bg2);
+      transition: border-color .2s, transform .2s;
+      cursor: pointer;
+    }
+    .screenshot-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .screenshot-card.wide { grid-column: span 2; }
+    .screenshot-card img {
+      width: 100%; display: block;
+      aspect-ratio: 16/9; object-fit: cover; object-position: top;
+    }
+    .screenshot-card .cap {
+      padding: .75rem 1rem; font-size: .82rem; color: var(--muted);
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .screenshot-card .cap .dot-sm {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); flex-shrink: 0;
+    }
+
+    /* ── QUICKSTART ── */
+    .steps { display: flex; flex-direction: column; gap: 1.2rem; }
+    .step {
+      display: flex; gap: 1.2rem; align-items: flex-start;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.2rem 1.4rem;
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(91,141,238,.15); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: .9rem; flex-shrink: 0; margin-top: .1rem;
+    }
+    .step h3 { font-size: .95rem; font-weight: 700; margin-bottom: .4rem; }
+    .step p { font-size: .88rem; color: var(--muted); }
+    .code-block {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.2rem 1.4rem;
+      font-family: var(--mono); font-size: .85rem;
+      color: #cdd6f4; overflow-x: auto; margin-top: 1.5rem;
+      line-height: 1.8; white-space: pre;
+    }
+    .code-block .comment { color: #6c7086; }
+    .code-block .cmd { color: var(--accent2); }
+    .code-block .arg { color: var(--accent3); }
+
+    /* ── SERVICES ── */
+    .services-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+    .service-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.2rem 1.3rem;
+      transition: border-color .2s;
+    }
+    .service-card:hover { border-color: var(--border); }
+    .service-url {
+      font-family: var(--mono); font-size: .8rem; color: var(--accent);
+      margin: .3rem 0 .5rem;
+    }
+    .service-card h3 { font-size: .93rem; font-weight: 700; }
+    .service-card p { font-size: .8rem; color: var(--muted); }
+    .service-auth { margin-top: .6rem; font-size: .78rem; color: var(--muted); }
+    .service-auth span { color: var(--accent3); font-family: var(--mono); }
+
+    /* ── ARCHITECTURE ── */
+    .arch-box {
+      background: #0d1117; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.8rem;
+      font-family: var(--mono); font-size: .8rem; color: #8892a4;
+      overflow-x: auto; line-height: 1.7; white-space: pre;
+    }
+    .arch-box .hi  { color: #cba6f7; }
+    .arch-box .hi2 { color: var(--accent); }
+    .arch-box .hi3 { color: var(--accent2); }
+    .arch-box .hi4 { color: var(--accent3); }
+
+    /* ── TEAM ── */
+    .team-grid { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+    .team-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.4rem 1.6rem;
+      display: flex; align-items: center; gap: 1rem;
+      flex: 1; min-width: 220px;
+      transition: border-color .2s;
+    }
+    .team-card:hover { border-color: var(--accent); }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #9b59f7);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1rem; color: #fff; flex-shrink: 0;
+    }
+    .avatar.green { background: linear-gradient(135deg, var(--accent2), #1a8a5c); }
+    .team-card h3 { font-size: .95rem; font-weight: 700; }
+    .team-card p { font-size: .8rem; color: var(--muted); margin-top: .1rem; }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 1.5rem;
+      text-align: center;
+      color: var(--muted); font-size: .82rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── DIVIDER ── */
+    .divider { border: none; border-top: 1px solid var(--border); }
+
+    /* ── LIGHTBOX ── */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 999;
+      background: rgba(0,0,0,.88); align-items: center; justify-content: center;
+      padding: 1.5rem; cursor: pointer;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; cursor: default; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .screenshots-grid { grid-template-columns: 1fr; }
+      .screenshot-card.wide { grid-column: span 1; }
+      .hero-stats { gap: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-brand" href="#">
+    <span class="dot"></span>
+    CameraMonitor
+  </a>
+  <div class="nav-links">
+    <a href="#features">Возможности</a>
+    <a href="#screenshots">Скриншоты</a>
+    <a href="#quickstart">Запуск</a>
+    <a href="#team">Команда</a>
+  </div>
+  <a class="nav-cta" href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
+    Репозиторий →
+  </a>
+</nav>
+
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <span class="pill">PoC</span>
+      Учебный проект · МИЭМ НИУ ВШЭ · 2026
+    </div>
+    <h1>
+      Мониторинг качества<br />
+      <span>видеопотоков IP-камер</span>
+    </h1>
+    <p class="hero-sub">
+      Кастомный RTSP-экспортёр на Python, Prometheus Blackbox Exporter,
+      VictoriaMetrics и Grafana — всё в одном Docker Compose.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        Открыть репозиторий
+      </a>
+      <a class="btn btn-ghost" href="#quickstart">
+        Быстрый старт
+      </a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <span class="val">6</span>
+        <span class="lbl">метрик RTSP</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">4</span>
+        <span class="lbl">модуля Blackbox</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">1 сек</span>
+        <span class="lbl">scrape-цикл</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">2</span>
+        <span class="lbl">пути в Grafana</span>
+      </div>
+      <div class="hero-stat">
+        <span class="val">8</span>
+        <span class="lbl">сервисов в стеке</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- FEATURES / STACK -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Стек</div>
+    <div class="section-title">Из чего собран проект</div>
+    <p class="section-sub">Все компоненты запускаются одной командой через Docker Compose.</p>
+
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(230,97,30,.15)">🐍</div>
+        <div>
+          <h3>RTSP Exporter</h3>
+          <p>Кастомный Python-экспортёр. RTSP OPTIONS probe, Digest-авторизация для Hikvision, метрики latency / jitter / bitrate.</p>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(229,84,21,.15)">📡</div>
+        <div>
+          <h3>Blackbox Exporter</h3>
+          <p>ICMP ping, TCP check RTSP-порта и ONVIF-порта, HTTP 2xx. Все результаты — в VictoriaMetrics.</p>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(91,141,238,.15)">⚡</div>
+        <div>
+          <h3>VictoriaMetrics</h3>
+          <p>Prometheus-совместимое хранилище метрик. Скрейп раз в секунду, совместим с PromQL.</p>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(240,150,9,.15)">📊</div>
+        <div>
+          <h3>Grafana + Grafana Live</h3>
+          <p>Дашборд с stat-панелями, heatmap, gauge и SLA uptime. Grafana Live — WebSocket push от экспортёра для обновления панелей без задержки scrape-цикла.</p>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(61,214,140,.15)">🔧</div>
+        <div>
+          <h3>Config API</h3>
+          <p>FastAPI CRUD для управления списком камер. Авто-reload экспортёра при изменении конфига.</p>
+        </div>
+      </div>
+      <div class="tech-card">
+        <div class="tech-icon" style="background:rgba(155,89,247,.15)">🖥</div>
+        <div>
+          <h3>Config UI</h3>
+          <p>React + Vite SPA на Nginx. Добавление, редактирование, удаление камер с live-обновлением.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- METRICS -->
+<section style="padding-top: 0">
+  <div class="container">
+    <div class="section-label">Метрики</div>
+    <div class="section-title">Что собирает экспортёр</div>
+    <p class="section-sub">Каждая метрика несёт лейблы <code>camera</code>, <code>host</code>, <code>location</code>, <code>building</code>.</p>
+
+    <div class="metrics-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Метрика</th>
+            <th>Тип</th>
+            <th>Описание</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>camera_up</code></td>
+            <td><span class="badge badge-gauge">gauge</span></td>
+            <td>Доступность камеры: 1 = онлайн, 0 = офлайн</td>
+          </tr>
+          <tr>
+            <td><code>camera_rtsp_latency_ms</code></td>
+            <td><span class="badge badge-gauge">gauge</span></td>
+            <td>Задержка RTSP-подключения (мс)</td>
+          </tr>
+          <tr>
+            <td><code>camera_rtp_packet_loss_ratio</code></td>
+            <td><span class="badge badge-gauge">gauge</span></td>
+            <td>Доля потерянных RTP-пакетов (0..1)</td>
+          </tr>
+          <tr>
+            <td><code>camera_rtp_jitter_ms</code></td>
+            <td><span class="badge badge-gauge">gauge</span></td>
+            <td>Джиттер RTP (мс)</td>
+          </tr>
+          <tr>
+            <td><code>camera_stream_bitrate_kbps</code></td>
+            <td><span class="badge badge-gauge">gauge</span></td>
+            <td>Битрейт видеопотока (кбит/с)</td>
+          </tr>
+          <tr>
+            <td><code>probe_success</code></td>
+            <td><span class="badge badge-metric">blackbox</span></td>
+            <td>TCP/ICMP доступность (1 = успех)</td>
+          </tr>
+          <tr>
+            <td><code>probe_duration_seconds</code></td>
+            <td><span class="badge badge-metric">blackbox</span></td>
+            <td>Время выполнения пробы</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- SCREENSHOTS -->
+<section id="screenshots" style="background: var(--bg2);">
+  <div class="container">
+    <div class="section-label">Демо</div>
+    <div class="section-title">Как выглядит в работе</div>
+    <p class="section-sub">Grafana дашборд, веб-интерфейс управления камерами и Swagger API.</p>
+
+    <div class="screenshots-grid">
+
+      <div class="screenshot-card wide" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.24.png"
+             alt="Grafana dashboard — общая сводка" loading="lazy" />
+        <div class="cap"><span class="dot-sm"></span>Grafana · Обзорный дашборд — stat-панели, таблица состояния камер, графики задержки и битрейта</div>
+      </div>
+
+      <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.50.png"
+             alt="Grafana — Heatmap и Gauge" loading="lazy" />
+        <div class="cap"><span class="dot-sm"></span>Grafana · Heatmap потерь пакетов, gauge latency и packet loss, аномалии</div>
+      </div>
+
+      <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="../Screenshot/Screenshot 2026-06-05 at 18.39.38.png"
+             alt="Grafana — Blackbox и SLA" loading="lazy" />
+        <div class="cap"><span class="dot-sm"></span>Grafana · TCP-доступность Blackbox, SLA uptime, heatmap задержек</div>
+      </div>
+
+      <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="../Screenshot/Screenshot 2026-06-05 at 18.41.26.png"
+             alt="Config UI — управление камерами" loading="lazy" />
+        <div class="cap"><span class="dot-sm"></span>Config UI · React-интерфейс управления камерами — добавление, редактирование, удаление</div>
+      </div>
+
+      <div class="screenshot-card" onclick="openLightbox(this.querySelector('img').src)">
+        <img src="../Screenshot/Screenshot 2026-06-05 at 18.42.01.png"
+             alt="Swagger API" loading="lazy" />
+        <div class="cap"><span class="dot-sm"></span>Config API · Swagger UI — полный REST CRUD для управления камерами</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- QUICKSTART -->
+<section id="quickstart">
+  <div class="container">
+    <div class="section-label">Запуск</div>
+    <div class="section-title">Быстрый старт</div>
+    <p class="section-sub">Docker Engine ≥ 20.10 и Docker Compose ≥ 2.0. Три команды — и весь стек поднят.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h3>Клонировать репозиторий</h3>
+          <p>Скопировать проект к себе на машину.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h3>Собрать и запустить стек</h3>
+          <p>Одна команда поднимает все 8 сервисов: mock-камеры, экспортёры, VictoriaMetrics, Grafana, Config API и UI.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h3>Открыть Grafana</h3>
+          <p>Дашборд доступен сразу — datasource и panels инициализируются автоматически через provisioning.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+<span class="comment"># 1. Клонировать</span>
+<span class="cmd">git clone</span> <span class="arg">https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter.git</span>
+<span class="cmd">cd</span> 1-3-blackbox-exporter
+
+<span class="comment"># 2. Запустить весь стек</span>
+<span class="cmd">docker compose up --build -d</span>
+
+<span class="comment"># 3. Проверить статус</span>
+<span class="cmd">docker compose ps</span>
+    </div>
+  </div>
+</section>
+
+
+<!-- SERVICES -->
+<section style="padding-top: 0">
+  <div class="container">
+    <div class="section-label">Сервисы</div>
+    <div class="section-title">Доступные URL после запуска</div>
+    <p class="section-sub">Все сервисы поднимаются на localhost.</p>
+
+    <div class="services-grid">
+      <div class="service-card">
+        <h3>Grafana</h3>
+        <div class="service-url">localhost:3000</div>
+        <p>Дашборд мониторинга камер с автозагрузкой.</p>
+        <div class="service-auth">Логин: <span>admin / admin</span></div>
+      </div>
+      <div class="service-card">
+        <h3>VictoriaMetrics</h3>
+        <div class="service-url">localhost:9090</div>
+        <p>Prometheus-совместимый API, VMUI, MetricsQL.</p>
+      </div>
+      <div class="service-card">
+        <h3>RTSP Exporter</h3>
+        <div class="service-url">localhost:9115/metrics</div>
+        <p>Метрики камер в формате Prometheus.</p>
+      </div>
+      <div class="service-card">
+        <h3>Blackbox Exporter</h3>
+        <div class="service-url">localhost:9116/metrics</div>
+        <p>TCP/ICMP пробы: <code>?module=tcp_rtsp&amp;target=…</code></p>
+      </div>
+      <div class="service-card">
+        <h3>Config UI</h3>
+        <div class="service-url">localhost:8080</div>
+        <p>React SPA для управления списком камер.</p>
+      </div>
+      <div class="service-card">
+        <h3>Config API</h3>
+        <div class="service-url">localhost:8000/docs</div>
+        <p>FastAPI CRUD + интерактивный Swagger UI.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ARCHITECTURE -->
+<section style="background: var(--bg2);">
+  <div class="container">
+    <div class="section-label">Архитектура</div>
+    <div class="section-title">Как устроен стек</div>
+    <p class="section-sub">Все компоненты работают в одной Docker-сети и общаются по именам сервисов.</p>
+
+    <div class="arch-box">
+<span class="hi">Mock-камеры</span> (×3, RTSP :8554–:8556)
+    │
+    ├──► <span class="hi2">rtsp-exporter</span>  :9115   Python · RTSP OPTIONS + Digest · метрики latency/jitter/loss/bitrate
+    │         │
+    │         ├──► <span class="hi3">VictoriaMetrics</span>  :9090   pull scrape · Prometheus API · VMUI
+    │         │              │
+    │         │              └──► <span class="hi4">Grafana</span>  :3000   (scrape-путь, ~1 с)
+    │         │
+    │         └──► <span class="hi4">Grafana Live</span>  WebSocket push · real-time · без задержки scrape-цикла
+    │
+    └──► <span class="hi2">blackbox-exporter</span> :9116  ICMP ping · TCP RTSP · TCP ONVIF · HTTP 2xx
+                   │
+                   ▼
+         <span class="hi3">VictoriaMetrics</span>  ──►  <span class="hi4">Grafana</span>
+
+    <span class="hi">Config UI</span>  :8080  (React + Nginx)
+         │   REST /cameras
+         ▼
+    <span class="hi2">Config API</span>  :8000  (FastAPI)  ──► POST /reload ──► rtsp-exporter
+         │   bind mount
+         ▼
+    exporter_config.yml
+    </div>
+  </div>
+</section>
+
+
+<!-- TEAM -->
+<section id="team">
+  <div class="container">
+    <div class="section-label">Команда</div>
+    <div class="section-title">Авторы проекта</div>
+    <p class="section-sub">Учебный проект, МИЭМ НИУ ВШЭ, 2026.</p>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="avatar">НП</div>
+        <div>
+          <h3>Плясов Николай</h3>
+          <p>МИЭМ НИУ ВШЭ · 2026</p>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="avatar green">ЧФ</div>
+        <div>
+          <h3>Чашкин Федор</h3>
+          <p>МИЭМ НИУ ВШЭ · 2026</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- FOOTER -->
+<footer>
+  <p>
+    <a href="https://git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter" target="_blank" rel="noopener">
+      git.miem.hse.ru/nvpliasov/1-3-blackbox-exporter
+    </a>
+    &nbsp;·&nbsp;
+    МИЭМ НИУ ВШЭ · 2026
+    &nbsp;·&nbsp;
+    Плясов Николай, Чашкин Федор
+  </p>
+</footer>
+
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightbox-img" src="" alt="" onclick="event.stopPropagation()" />
+</div>
+
+<script>
+  function openLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+
+</body>
+</html>
